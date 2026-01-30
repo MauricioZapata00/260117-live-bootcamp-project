@@ -1,6 +1,7 @@
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use crate::{app_state::AppState, domain::User};
 
 #[derive(Serialize)]
 pub struct SignupResponse {
@@ -12,7 +13,10 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-pub async fn signup(Json(request): Json<SignupRequest>) -> impl IntoResponse {
+pub async fn signup(
+    State(state): State<AppState>,
+    Json(request): Json<SignupRequest>,
+) -> impl IntoResponse {
     // Validate email format
     if request.email.is_empty() {
         let error_response = ErrorResponse {
@@ -35,6 +39,15 @@ pub async fn signup(Json(request): Json<SignupRequest>) -> impl IntoResponse {
         };
         return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
     }
+
+    // Create a new User instance
+    let user = User::new(request.email, request.password, request.requires_2fa);
+
+    // Get write lock and add user to store
+    let mut user_store = state.user_store.write().await;
+
+    // Add user to the user store
+    user_store.add_user(user).unwrap();
 
     // If validation passes, return 201 Created
     let response = SignupResponse {

@@ -3,7 +3,12 @@ use std::error::Error;
 use tokio::net::TcpListener;
 use tower_http::services::ServeDir;
 
+pub mod app_state;
+pub mod domain;
 pub mod routes;
+pub mod services;
+
+use app_state::AppState;
 
 // This struct encapsulates our application-related logic.
 pub struct Application {
@@ -14,7 +19,7 @@ pub struct Application {
 }
 
 impl Application {
-    pub async fn build(address: &str) -> Result<Self, Box<dyn Error>> {
+    pub async fn build(app_state: AppState, address: &str) -> Result<Self, Box<dyn Error>> {
         // Create the router with the fallback service for static assets
         let assets_dir = ServeDir::new("assets");
         let router = Router::new()
@@ -23,6 +28,7 @@ impl Application {
             .route("/logout", post(routes::logout))
             .route("/verify-2fa", post(routes::verify_2fa))
             .route("/verify-token", post(routes::verify_token))
+            .with_state(app_state)
             .fallback_service(assets_dir);
 
         let listener = tokio::net::TcpListener::bind(address).await?;
