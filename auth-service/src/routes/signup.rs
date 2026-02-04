@@ -1,69 +1,55 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use crate::{app_state::AppState, domain::User};
+use crate::{
+    app_state::AppState,
+    domain::{AuthAPIError, User},
+};
 
 #[derive(Serialize)]
 pub struct SignupResponse {
     pub message: String,
 }
 
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
-}
-
 pub async fn signup(
     State(state): State<AppState>,
     Json(request): Json<SignupRequest>,
-) -> impl IntoResponse {
-    // Validate email format
-    if request.email.is_empty() {
-        let error_response = ErrorResponse {
-            error: "Email cannot be empty".to_string(),
-        };
-        return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
+) -> Result<impl IntoResponse, AuthAPIError> {
+    let email = request.email;
+    let password = request.password;
+
+    // Validate email - early return AuthAPIError::InvalidCredentials if:
+    // - email is empty or does not contain '@'
+    if email.is_empty() || !email.contains('@') {
+        return Err(AuthAPIError::InvalidCredentials);
     }
 
-    if !is_valid_email(&request.email) {
-        let error_response = ErrorResponse {
-            error: "Invalid email format".to_string(),
-        };
-        return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
+    // Validate password - early return AuthAPIError::InvalidCredentials if:
+    // - password is less than 8 characters
+    if password.len() < 8 {
+        return Err(AuthAPIError::InvalidCredentials);
     }
 
-    // Validate password
-    if request.password.is_empty() {
-        let error_response = ErrorResponse {
-            error: "Password cannot be empty".to_string(),
-        };
-        return (StatusCode::BAD_REQUEST, Json(error_response)).into_response();
-    }
+    let user = User::new(email, password, request.requires_2fa);
 
-    // Create a new User instance
-    let user = User::new(request.email, request.password, request.requires_2fa);
-
-    // Get write lock and add user to store
     let mut user_store = state.user_store.write().await;
 
-    // Add user to the user store
-    user_store.add_user(user).unwrap();
+    // Early return AuthAPIError::UserAlreadyExists if email exists in user_store.
+    // Instead of using unwrap, early return AuthAPIError::UnexpectedError if add_user() fails.
+    match user_store.add_user(user) {
+        Ok(_) => {},
+        Err(crate::services::hashmap_user_store::UserStoreError::UserAlreadyExists) => {
+            return Err(AuthAPIError::UserAlreadyExists);
+        }
+        Err(_) => {
+            return Err(AuthAPIError::UnexpectedError);
+        }
+    }
 
-    // If validation passes, return 201 Created
-    let response = SignupResponse {
+    let response = Json(SignupResponse {
         message: "User created successfully!".to_string(),
-    };
-    (StatusCode::CREATED, Json(response)).into_response()
-}
+    });
 
-fn is_valid_email(email: &str) -> bool {
-    // Email validation using regex pattern
-    // Pattern: ^[a-zA-Z0-9._%+-]+@(?:[a-zA-Z0-9-]+\.)+(com|com\.[a-zA-Z]{2,4})$
-    // This validates emails with .com or .com.XX domains
-    let email_regex = Regex::new(r"^[a-zA-Z0-9._%+-]+@(?:[a-zA-Z0-9-]+\.)+(com|com\.[a-zA-Z]{2,4})$")
-        .expect("Invalid regex pattern");
-
-    email_regex.is_match(email)
+    Ok((StatusCode::CREATED, response))
 }
 
 #[derive(Deserialize)]

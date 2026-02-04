@@ -1,3 +1,4 @@
+use auth_service::ErrorResponse;
 use crate::helpers::{get_random_email, TestApp};
 
 #[tokio::test]
@@ -48,111 +49,43 @@ async fn should_return_201_if_valid_input() {
 
 #[tokio::test]
 async fn should_return_400_if_invalid_input() {
+    // The signup route should return a 400 HTTP status code if an invalid input is sent.
+    // The input is considered invalid if:
+    // - The email is empty or does not contain '@'
+    // - The password is less than 8 characters
+
     let app = TestApp::new().await;
 
+    // Create an array of invalid inputs. Then, iterate through the array and
+    // make HTTP calls to the signup route. Assert a 400 HTTP status code is returned.
     let test_cases = [
         // Empty email
-        (
-            serde_json::json!({
-                "email": "",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Email cannot be empty"
-        ),
+        serde_json::json!({
+            "email": "",
+            "password": "password123",
+            "requires2FA": true
+        }),
         // Invalid email - no @
-        (
-            serde_json::json!({
-                "email": "invalidemail",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Invalid email - no domain
-        (
-            serde_json::json!({
-                "email": "test@",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Invalid email - no local part
-        (
-            serde_json::json!({
-                "email": "@example.com",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Invalid email - no TLD
-        (
-            serde_json::json!({
-                "email": "test@example",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Invalid email - double @
-        (
-            serde_json::json!({
-                "email": "test@@example.com",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Invalid email - ends with dot
-        (
-            serde_json::json!({
-                "email": "test@example.com.",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Empty password
-        (
-            serde_json::json!({
-                "email": get_random_email(),
-                "password": "",
-                "requires2FA": true
-            }),
-            "Password cannot be empty"
-        ),
-        // Invalid email - doesn't match .com or .com.XX pattern
-        (
-            serde_json::json!({
-                "email": "qSdy6asQjL8siKA@m.fegl",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Invalid email - .net domain
-        (
-            serde_json::json!({
-                "email": "test@example.net",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
-        // Invalid email - .org domain
-        (
-            serde_json::json!({
-                "email": "user@domain.org",
-                "password": "password123",
-                "requires2FA": true
-            }),
-            "Invalid email format"
-        ),
+        serde_json::json!({
+            "email": "invalidemail",
+            "password": "password123",
+            "requires2FA": true
+        }),
+        // Password less than 8 characters
+        serde_json::json!({
+            "email": get_random_email(),
+            "password": "pass",
+            "requires2FA": true
+        }),
+        // Empty password (less than 8 characters)
+        serde_json::json!({
+            "email": get_random_email(),
+            "password": "",
+            "requires2FA": true
+        }),
     ];
 
-    for (test_case, expected_error) in test_cases.iter() {
+    for test_case in test_cases.iter() {
         let response = app.post_signup(test_case).await;
 
         assert_eq!(
@@ -162,17 +95,13 @@ async fn should_return_400_if_invalid_input() {
             test_case
         );
 
-        // Check error message
-        let json: serde_json::Value = response
-            .json()
-            .await
-            .expect("Failed to parse response body");
-
         assert_eq!(
-            json["error"],
-            *expected_error,
-            "Error message mismatch for input: {:?}",
-            test_case
+            response
+                .json::<ErrorResponse>()
+                .await
+                .expect("Could not deserialize response body to ErrorResponse")
+                .error,
+            "Invalid credentials".to_owned()
         );
     }
 }
@@ -333,4 +262,31 @@ async fn should_return_422_if_malformed_input() {
             test_case
         );
     }
+}
+
+#[tokio::test]
+async fn should_return_409_if_email_already_exists() {
+    let app = TestApp::new().await;
+
+    let signup_request = serde_json::json!({
+        "email": get_random_email(),
+        "password": "password123",
+        "requires2FA": true
+    });
+
+    // Call the signup route twice. The second request should fail with a 409 HTTP status code
+    let response = app.post_signup(&signup_request).await;
+    assert_eq!(response.status().as_u16(), 201);
+
+    let response = app.post_signup(&signup_request).await;
+    assert_eq!(response.status().as_u16(), 409);
+
+    assert_eq!(
+        response
+            .json::<ErrorResponse>()
+            .await
+            .expect("Could not deserialize response body to ErrorResponse")
+            .error,
+        "User already exists".to_owned()
+    );
 }
