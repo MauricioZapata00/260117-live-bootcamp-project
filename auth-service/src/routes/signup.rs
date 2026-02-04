@@ -35,9 +35,9 @@ pub async fn signup(
 
     // Early return AuthAPIError::UserAlreadyExists if email exists in user_store.
     // Instead of using unwrap, early return AuthAPIError::UnexpectedError if add_user() fails.
-    match user_store.add_user(user) {
+    match user_store.add_user(user).await {
         Ok(_) => {},
-        Err(crate::services::hashmap_user_store::UserStoreError::UserAlreadyExists) => {
+        Err(crate::domain::UserStoreError::UserAlreadyExists) => {
             return Err(AuthAPIError::UserAlreadyExists);
         }
         Err(_) => {
