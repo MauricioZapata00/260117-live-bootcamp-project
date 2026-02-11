@@ -15,12 +15,16 @@ pub async fn signup(
     Json(request): Json<SignupRequest>,
 ) -> Result<impl IntoResponse, AuthAPIError> {
     // Parse and validate email using Email::parse
-    let email = Email::parse(request.email)
-        .map_err(|_| AuthAPIError::InvalidCredentials)?;
+    let email = match Email::parse(request.email) {
+        Ok(email) => email,
+        Err(_) => return Err(AuthAPIError::InvalidCredentials),
+    };
 
     // Parse and validate password using Password::parse
-    let password = Password::parse(request.password)
-        .map_err(|_| AuthAPIError::InvalidCredentials)?;
+    let password = match Password::parse(request.password) {
+        Ok(password) => password,
+        Err(_) => return Err(AuthAPIError::InvalidCredentials),
+    };
 
     let user = User::new(email, password, request.requires_2fa);
 
