@@ -1,6 +1,7 @@
 use auth_service::app_state::AppState;
-use auth_service::domain::UserStore;
+use auth_service::domain::{BannedTokenStore, UserStore};
 use auth_service::services::hashmap_user_store::HashmapUserStore;
+use auth_service::services::hashset_banned_token_store::HashsetBannedTokenStore;
 use auth_service::utils::constants::test;
 use auth_service::Application;
 use reqwest::cookie::Jar;
@@ -11,13 +12,15 @@ use uuid::Uuid;
 pub struct TestApp {
     pub address: String,
     pub cookie_jar: Arc<Jar>,
+    pub banned_token_store: Arc<RwLock<dyn BannedTokenStore>>,
     pub http_client: reqwest::Client,
 }
 
 impl TestApp {
     pub async fn new() -> Self {
         let user_store = Arc::new(RwLock::new(HashmapUserStore::default())) as Arc<RwLock<dyn UserStore>>;
-        let app_state = AppState::new(user_store);
+        let banned_token_store = Arc::new(RwLock::new(HashsetBannedTokenStore::default())) as Arc<RwLock<dyn BannedTokenStore>>;
+        let app_state = AppState::new(user_store, banned_token_store.clone());
 
         let app = Application::build(app_state, test::APP_ADDRESS)
             .await
@@ -39,6 +42,7 @@ impl TestApp {
         Self {
             address,
             cookie_jar,
+            banned_token_store,
             http_client,
         }
     }
