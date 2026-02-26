@@ -1,18 +1,25 @@
-use auth_service::app_state::AppState;
-use auth_service::domain::{BannedTokenStore, UserStore};
-use auth_service::services::hashmap_user_store::HashmapUserStore;
-use auth_service::services::hashset_banned_token_store::HashsetBannedTokenStore;
-use auth_service::utils::constants::test;
-use auth_service::Application;
+use auth_service::{
+    app_state::{AppState, BannedTokenStoreType, TwoFACodeStoreType},
+    domain::UserStore,
+    services::{
+        hashmap_two_fa_code_store::HashmapTwoFACodeStore,
+        hashmap_user_store::HashmapUserStore,
+        hashset_banned_token_store::HashsetBannedTokenStore,
+    },
+    utils::constants::test,
+    Application,
+};
 use reqwest::cookie::Jar;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+use auth_service::domain::{BannedTokenStore, TwoFACodeStore};
 
 pub struct TestApp {
     pub address: String,
     pub cookie_jar: Arc<Jar>,
-    pub banned_token_store: Arc<RwLock<dyn BannedTokenStore>>,
+    pub banned_token_store: BannedTokenStoreType,
+    pub two_fa_code_store: TwoFACodeStoreType,
     pub http_client: reqwest::Client,
 }
 
@@ -20,7 +27,13 @@ impl TestApp {
     pub async fn new() -> Self {
         let user_store = Arc::new(RwLock::new(HashmapUserStore::default())) as Arc<RwLock<dyn UserStore>>;
         let banned_token_store = Arc::new(RwLock::new(HashsetBannedTokenStore::default())) as Arc<RwLock<dyn BannedTokenStore>>;
-        let app_state = AppState::new(user_store, banned_token_store.clone());
+        let two_fa_code_store = Arc::new(RwLock::new(HashmapTwoFACodeStore::default())) as Arc<RwLock<dyn TwoFACodeStore>>;
+
+        let app_state = AppState::new(
+            user_store,
+            banned_token_store.clone(),
+            two_fa_code_store.clone(),
+        );
 
         let app = Application::build(app_state, test::APP_ADDRESS)
             .await
@@ -43,6 +56,7 @@ impl TestApp {
             address,
             cookie_jar,
             banned_token_store,
+            two_fa_code_store,
             http_client,
         }
     }

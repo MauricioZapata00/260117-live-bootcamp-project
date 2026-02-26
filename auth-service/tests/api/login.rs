@@ -1,11 +1,15 @@
-use auth_service::{utils::constants::JWT_COOKIE_NAME, ErrorResponse};
+use auth_service::{
+    domain::Email,
+    routes::TwoFactorAuthResponse,
+    utils::constants::JWT_COOKIE_NAME,
+    ErrorResponse,
+};
 use crate::helpers::{get_random_email, TestApp};
 
 #[tokio::test]
 async fn should_return_422_if_malformed_credentials() {
     let app = TestApp::new().await;
 
-    // Test with malformed JSON (missing fields)
     let test_cases = [
         serde_json::json!({}),
         serde_json::json!({"email": "test@example.com"}),
@@ -27,7 +31,6 @@ async fn should_return_422_if_malformed_credentials() {
 async fn should_return_400_if_invalid_input() {
     let app = TestApp::new().await;
 
-    // Test with invalid email and password formats
     let test_cases = [
         serde_json::json!({
             "email": "invalid-email",
@@ -65,7 +68,6 @@ async fn should_return_400_if_invalid_input() {
 async fn should_return_401_if_incorrect_credentials() {
     let app = TestApp::new().await;
 
-    // Test with user that doesn't exist
     let random_email = get_random_email();
     let response = app
         .post_login(&serde_json::json!({
@@ -83,7 +85,6 @@ async fn should_return_401_if_incorrect_credentials() {
 
     assert_eq!(error_response.error, "Incorrect credentials");
 
-    // Test with existing user but wrong password
     let signup_body = serde_json::json!({
         "email": "test@example.com",
         "password": "password123",
@@ -136,4 +137,38 @@ async fn should_return_200_if_valid_credentials_and_2fa_disabled() {
         .expect("No auth cookie found");
 
     assert!(!auth_cookie.value().is_empty());
+}
+
+#[tokio::test]
+async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
+    let app = TestApp::new().await;
+    let random_email = get_random_email();
+
+    let signup_body = serde_json::json!({
+        "email": random_email,
+        "password": "password123",
+        "requires2FA": true
+    });
+    app.post_signup(&signup_body).await;
+
+    let login_body = serde_json::json!({
+        "email": random_email,
+        "password": "password123"
+    });
+    let response = app.post_login(&login_body).await;
+
+    assert_eq!(response.status().as_u16(), 206);
+
+    let json_body: TwoFactorAuthResponse = response
+        .json()
+        .await
+        .expect("Could not deserialize response body to TwoFactorAuthResponse");
+
+    assert_eq!(json_body.message, "2FA required".to_owned());
+
+    let email = Email::parse(random_email).unwrap();
+    let result = app.two_fa_code_store.read().await.get_code(&email).await;
+    assert!(result.is_ok());
+    let (login_attempt_id, _) = result.unwrap();
+    assert_eq!(login_attempt_id.as_ref(), json_body.login_attempt_id);
 }
