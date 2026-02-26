@@ -3,6 +3,8 @@ mod email;
 mod error;
 mod password;
 mod user;
+pub mod email_client;
+pub use email_client::EmailClient;
 
 pub use data_stores::{
     BannedTokenStore, BannedTokenStoreError, LoginAttemptId, TwoFACode, TwoFACodeStore,
