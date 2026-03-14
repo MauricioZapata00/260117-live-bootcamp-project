@@ -86,7 +86,7 @@ impl TwoFACode {
 
 impl Default for TwoFACode {
     fn default() -> Self {
-        use rand::Rng;
+        use rand::RngExt;
         let code = rand::rng().random_range(100_000u32..=999_999u32).to_string();
         Self(code)
     }
