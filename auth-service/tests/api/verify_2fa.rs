@@ -25,6 +25,8 @@ async fn should_return_422_if_malformed_input() {
             test_case
         );
     }
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -32,19 +34,16 @@ async fn should_return_400_if_invalid_input() {
     let app = TestApp::new().await;
 
     let test_cases = [
-        // Invalid email
         serde_json::json!({
             "email": "not-an-email",
             "loginAttemptId": LoginAttemptId::default().as_ref().to_owned(),
             "2FACode": "123456"
         }),
-        // Invalid login attempt ID (not a UUID)
         serde_json::json!({
             "email": "test@example.com",
             "loginAttemptId": "not-a-uuid",
             "2FACode": "123456"
         }),
-        // Invalid 2FA code (not 6 digits)
         serde_json::json!({
             "email": "test@example.com",
             "loginAttemptId": LoginAttemptId::default().as_ref().to_owned(),
@@ -68,13 +67,14 @@ async fn should_return_400_if_invalid_input() {
 
         assert_eq!(error_response.error, "Invalid credentials");
     }
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
 async fn should_return_401_if_incorrect_credentials() {
     let app = TestApp::new().await;
 
-    // Valid format but no matching entry in the 2FA store
     let response = app
         .post_verify_2fa(&serde_json::json!({
             "email": get_random_email(),
@@ -91,6 +91,8 @@ async fn should_return_401_if_incorrect_credentials() {
         .expect("Failed to deserialize error response");
 
     assert_eq!(error_response.error, "Incorrect credentials");
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -110,7 +112,6 @@ async fn should_return_401_if_old_code() {
         "password": "password123"
     });
 
-    // First login — capture the code from the store
     app.post_login(&login_body).await;
 
     let email = Email::parse(random_email.clone()).unwrap();
@@ -122,10 +123,8 @@ async fn should_return_401_if_old_code() {
         .await
         .unwrap();
 
-    // Second login — overwrites the store entry with a new code
     app.post_login(&login_body).await;
 
-    // Try to verify with the first (now stale) code
     let response = app
         .post_verify_2fa(&serde_json::json!({
             "email": random_email,
@@ -135,6 +134,8 @@ async fn should_return_401_if_old_code() {
         .await;
 
     assert_eq!(response.status().as_u16(), 401);
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -186,6 +187,8 @@ async fn should_return_200_if_correct_code() {
         .expect("No JWT cookie found");
 
     assert!(!auth_cookie.value().is_empty());
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -227,11 +230,11 @@ async fn should_return_401_if_same_code_twice() {
         "2FACode": code.as_ref().to_owned(),
     });
 
-    // First verify — should succeed
     let response = app.post_verify_2fa(&verify_body).await;
     assert_eq!(response.status().as_u16(), 200);
 
-    // Second verify with same code — should fail
     let response = app.post_verify_2fa(&verify_body).await;
     assert_eq!(response.status().as_u16(), 401);
+
+    app.clean_up().await;
 }

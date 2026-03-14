@@ -12,5 +12,5 @@ pub use data_stores::{
 };
 pub use email::Email;
 pub use error::AuthAPIError;
-pub use password::Password;
+pub use password::HashedPassword;
 pub use user::User;

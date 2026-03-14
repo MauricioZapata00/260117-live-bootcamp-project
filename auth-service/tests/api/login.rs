@@ -25,6 +25,8 @@ async fn should_return_422_if_malformed_credentials() {
             test_case
         );
     }
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -62,6 +64,8 @@ async fn should_return_400_if_invalid_input() {
 
         assert_eq!(error_response.error, "Invalid credentials");
     }
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -107,6 +111,8 @@ async fn should_return_401_if_incorrect_credentials() {
         .expect("Failed to deserialize error response");
 
     assert_eq!(error_response.error, "Incorrect credentials");
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -137,6 +143,8 @@ async fn should_return_200_if_valid_credentials_and_2fa_disabled() {
         .expect("No auth cookie found");
 
     assert!(!auth_cookie.value().is_empty());
+
+    app.clean_up().await;
 }
 
 #[tokio::test]
@@ -171,4 +179,6 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
     assert!(result.is_ok());
     let (login_attempt_id, _) = result.unwrap();
     assert_eq!(login_attempt_id.as_ref(), json_body.login_attempt_id);
+
+    app.clean_up().await;
 }

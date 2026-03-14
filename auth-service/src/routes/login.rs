@@ -3,7 +3,7 @@ use axum_extra::extract::CookieJar;
 use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
-    domain::{AuthAPIError, Email, LoginAttemptId, Password, TwoFACode},
+    domain::{AuthAPIError, Email, LoginAttemptId, TwoFACode},
     utils::auth::generate_auth_cookie,
 };
 
@@ -23,14 +23,14 @@ pub async fn login(
         Err(_) => return (jar, Err(AuthAPIError::InvalidCredentials)),
     };
 
-    let password = match Password::parse(request.password) {
-        Ok(password) => password,
-        Err(_) => return (jar, Err(AuthAPIError::InvalidCredentials)),
-    };
+    // Validate password length without hashing
+    if request.password.is_empty() || request.password.len() < 8 {
+        return (jar, Err(AuthAPIError::InvalidCredentials));
+    }
 
     let user_store = &state.user_store.read().await;
 
-    match user_store.validate_user(&email, &password).await {
+    match user_store.validate_user(&email, &request.password).await {
         Ok(_) => {}
         Err(_) => return (jar, Err(AuthAPIError::IncorrectCredentials)),
     };
