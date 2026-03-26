@@ -24,38 +24,46 @@ impl HashedPassword {
         Ok(Self(hash))
     }
 
+    #[tracing::instrument(name = "Verify raw password", skip_all)]
     pub async fn verify_raw_password(
         &self,
         password_candidate: &str,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let current_span: tracing::Span = tracing::Span::current();
         let password_hash = self.as_ref().to_owned();
         let password_candidate = password_candidate.to_owned();
 
         tokio::task::spawn_blocking(move || -> Result<(), Box<dyn Error + Send + Sync>> {
-            let expected_password_hash = PasswordHash::new(&password_hash)
-                .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-            Argon2::default()
-                .verify_password(password_candidate.as_bytes(), &expected_password_hash)
-                .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
+            current_span.in_scope(|| {
+                let expected_password_hash = PasswordHash::new(&password_hash)
+                    .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+                Argon2::default()
+                    .verify_password(password_candidate.as_bytes(), &expected_password_hash)
+                    .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
+            })
         })
         .await
         .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?
     }
 }
 
+#[tracing::instrument(name = "Computing password hash", skip_all)]
 async fn compute_password_hash(password: &str) -> Result<String, String> {
+    let current_span: tracing::Span = tracing::Span::current();
     let password = password.to_owned();
     tokio::task::spawn_blocking(move || {
-        let salt = SaltString::generate(&mut OsRng);
-        let password_hash = Argon2::new(
-            Algorithm::Argon2id,
-            Version::V0x13,
-            Params::new(15000, 2, 1, None).map_err(|e| e.to_string())?,
-        )
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| e.to_string())?
-        .to_string();
-        Ok::<String, String>(password_hash)
+        current_span.in_scope(|| {
+            let salt = SaltString::generate(&mut OsRng);
+            let password_hash = Argon2::new(
+                Algorithm::Argon2id,
+                Version::V0x13,
+                Params::new(15000, 2, 1, None).map_err(|e| e.to_string())?,
+            )
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|e| e.to_string())?
+            .to_string();
+            Ok::<String, String>(password_hash)
+        })
     })
     .await
     .map_err(|e| e.to_string())?

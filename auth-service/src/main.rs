@@ -6,6 +6,7 @@ use auth_service::services::data_stores::redis_banned_token_store::RedisBannedTo
 use auth_service::services::data_stores::redis_two_fa_code_store::RedisTwoFACodeStore;
 use auth_service::services::mock_email_client::MockEmailClient;
 use auth_service::utils::constants::{prod, DATABASE_URL, REDIS_HOST_NAME};
+use auth_service::utils::tracing::init_tracing;
 use auth_service::Application;
 use redis::Connection;
 use sqlx::PgPool;
@@ -14,6 +15,7 @@ use tokio::sync::RwLock;
 
 #[tokio::main]
 async fn main() {
+    init_tracing();
     let pg_pool = configure_postgresql().await;
     let redis_conn = configure_redis();
 
