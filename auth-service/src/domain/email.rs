@@ -1,22 +1,17 @@
+use color_eyre::eyre::{eyre, Result};
 use validator::ValidateEmail;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Email(String);
 
-#[derive(Debug, PartialEq)]
-pub enum EmailParseError {
-    EmptyEmail,
-    InvalidFormat,
-}
-
 impl Email {
-    pub fn parse(email: String) -> Result<Self, EmailParseError> {
+    pub fn parse(email: String) -> Result<Self> {
         if email.is_empty() {
-            return Err(EmailParseError::EmptyEmail);
+            return Err(eyre!("Email cannot be empty"));
         }
 
         if !email.validate_email() {
-            return Err(EmailParseError::InvalidFormat);
+            return Err(eyre!("Invalid email format: {}", email));
         }
 
         Ok(Self(email))
@@ -42,25 +37,25 @@ mod tests {
     #[test]
     fn test_empty_email() {
         let email = "".to_string();
-        assert_eq!(Email::parse(email), Err(EmailParseError::EmptyEmail));
+        assert!(Email::parse(email).is_err());
     }
 
     #[test]
     fn test_email_missing_at_symbol() {
         let email = "testexample.com".to_string();
-        assert_eq!(Email::parse(email), Err(EmailParseError::InvalidFormat));
+        assert!(Email::parse(email).is_err());
     }
 
     #[test]
     fn test_email_missing_domain() {
         let email = "test@".to_string();
-        assert_eq!(Email::parse(email), Err(EmailParseError::InvalidFormat));
+        assert!(Email::parse(email).is_err());
     }
 
     #[test]
     fn test_email_missing_username() {
         let email = "@example.com".to_string();
-        assert_eq!(Email::parse(email), Err(EmailParseError::InvalidFormat));
+        assert!(Email::parse(email).is_err());
     }
 
     #[test]

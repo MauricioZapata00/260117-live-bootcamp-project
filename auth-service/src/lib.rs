@@ -72,9 +72,9 @@ impl Application {
 
         let router = Router::new()
             .route("/signup", post(routes::signup))
-            // .route("/login", post(routes::login))
-            // .route("/logout", post(routes::logout))
-            // .route("/verify-2fa", post(routes::verify_2fa))
+            .route("/login", post(routes::login))
+            .route("/logout", post(routes::logout))
+            .route("/verify-2fa", post(routes::verify_2fa))
             .route("/verify-token", post(routes::verify_token))
             .with_state(app_state)
             .fallback_service(ServeDir::new("assets"))
