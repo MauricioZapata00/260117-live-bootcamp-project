@@ -2,7 +2,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
-    domain::{AuthAPIError, Email, HashedPassword, User},
+    domain::{AuthAPIError, Email, HashedPassword, User, UserStoreError},
 };
 
 #[derive(Serialize)]
@@ -10,7 +10,7 @@ pub struct SignupResponse {
     pub message: String,
 }
 
-#[tracing::instrument(name = "Signup", skip_all, err(Debug))]
+#[tracing::instrument(name = "Signup", skip_all)]
 pub async fn signup(
     State(state): State<AppState>,
     Json(request): Json<SignupRequest>,
@@ -29,14 +29,11 @@ pub async fn signup(
 
     let mut user_store = state.user_store.write().await;
 
-    match user_store.add_user(user).await {
-        Ok(_) => {},
-        Err(crate::domain::UserStoreError::UserAlreadyExists) => {
-            return Err(AuthAPIError::UserAlreadyExists);
-        }
-        Err(_) => {
-            return Err(AuthAPIError::UnexpectedError);
-        }
+    if let Err(e) = user_store.add_user(user).await {
+        return Err(match e {
+            UserStoreError::UserAlreadyExists => AuthAPIError::UserAlreadyExists,
+            _ => AuthAPIError::UnexpectedError(e.into()),
+        });
     }
 
     let response = Json(SignupResponse {
