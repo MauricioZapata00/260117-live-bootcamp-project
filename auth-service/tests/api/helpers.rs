@@ -13,6 +13,7 @@ use auth_service::{
     utils::constants::{test, DATABASE_URL, DEFAULT_REDIS_HOSTNAME},
     Application,
 };
+use secrecy::{ExposeSecret, SecretString};
 use reqwest::cookie::Jar;
 use sqlx::{postgres::{PgConnectOptions, PgPoolOptions}, Connection, Executor, PgConnection, PgPool};
 use std::str::FromStr;
@@ -169,7 +170,7 @@ fn configure_redis() -> Arc<RwLock<RedisConnection>> {
 }
 
 async fn configure_postgresql() -> (PgPool, String) {
-    let postgresql_conn_url = DATABASE_URL.to_owned();
+    let postgresql_conn_url = DATABASE_URL.expose_secret().to_owned();
 
     let db_name = Uuid::new_v4().to_string();
 
@@ -177,7 +178,7 @@ async fn configure_postgresql() -> (PgPool, String) {
 
     let postgresql_conn_url_with_db = format!("{}/{}", postgresql_conn_url, db_name);
 
-    let pool = get_postgres_pool(&postgresql_conn_url_with_db)
+    let pool = get_postgres_pool(&SecretString::new(postgresql_conn_url_with_db.into_boxed_str()))
         .await
         .expect("Failed to create Postgres connection pool!");
 
@@ -209,7 +210,7 @@ async fn configure_database(db_conn_string: &str, db_name: &str) {
 }
 
 async fn delete_database(db_name: &str) {
-    let postgresql_conn_url: String = DATABASE_URL.to_owned();
+    let postgresql_conn_url: String = DATABASE_URL.expose_secret().to_owned();
 
     let connection_options = PgConnectOptions::from_str(&postgresql_conn_url)
         .expect("Failed to parse PostgreSQL connection string");

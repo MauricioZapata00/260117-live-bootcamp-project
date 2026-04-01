@@ -1,5 +1,6 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use axum_extra::extract::CookieJar;
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use crate::{
     app_state::AppState,
@@ -9,8 +10,8 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
-    pub email: String,
-    pub password: String,
+    pub email: SecretString,
+    pub password: SecretString,
 }
 
 #[tracing::instrument(name = "Login", skip_all)]
@@ -25,7 +26,7 @@ pub async fn login(
     };
 
     // Validate password length without hashing
-    if request.password.is_empty() || request.password.len() < 8 {
+    if request.password.expose_secret().is_empty() || request.password.expose_secret().len() < 8 {
         return (jar, Err(AuthAPIError::InvalidCredentials));
     }
 
@@ -71,7 +72,7 @@ async fn handle_2fa(
 
     if let Err(e) = state
         .email_client
-        .send_email(email, "2FA Code", &format!("Your 2FA code is: {}", two_fa_code.as_ref()))
+        .send_email(email, "2FA Code", &format!("Your 2FA code is: {}", two_fa_code.as_ref().expose_secret()))
         .await
     {
         return (jar, Err(AuthAPIError::UnexpectedError(e)));
@@ -79,7 +80,7 @@ async fn handle_2fa(
 
     let response = Json(LoginResponse::TwoFactorAuth(TwoFactorAuthResponse {
         message: "2FA required".to_owned(),
-        login_attempt_id: login_attempt_id.as_ref().to_owned(),
+        login_attempt_id: login_attempt_id.as_ref().expose_secret().to_owned(),
     }));
 
     (jar, Ok((StatusCode::PARTIAL_CONTENT, response)))

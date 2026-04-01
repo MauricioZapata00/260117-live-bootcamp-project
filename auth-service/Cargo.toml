@@ -29,6 +29,7 @@ argon2 = { version = "=0.5.3", features = ["std"] }
 redis = { version = "0.32.7", features = ["tokio-comp"] }
 sqlx = { version = "=0.8.6", features = [ "runtime-tokio-rustls", "postgres", "migrate"] }
 validator = "=0.20.0"
+secrecy = { version = "0.10.3", features = ["serde"] }
 
 [dev-dependencies]
 fake = "=4.4.0"

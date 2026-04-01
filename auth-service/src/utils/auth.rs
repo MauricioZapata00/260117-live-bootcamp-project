@@ -3,6 +3,7 @@ use axum_extra::extract::cookie::{Cookie, SameSite};
 use chrono::Utc;
 use color_eyre::eyre::{eyre, Context, ContextCompat, Result};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Validation};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use crate::domain::{BannedTokenStore, Email};
@@ -47,7 +48,7 @@ fn generate_auth_token(email: &Email) -> Result<String> {
         exp
     ))?;
 
-    let sub = email.as_ref().to_owned();
+    let sub = email.as_ref().expose_secret().to_owned();
     let claims = Claims { sub, exp };
 
     create_token(&claims)
@@ -59,7 +60,8 @@ pub async fn validate_token(
     token: &str,
     banned_token_store: Arc<RwLock<dyn BannedTokenStore>>,
 ) -> Result<Claims> {
-    match banned_token_store.read().await.contains_token(token).await {
+    let token_secret = SecretString::new(token.to_owned().into_boxed_str());
+    match banned_token_store.read().await.contains_token(&token_secret).await {
         Ok(value) => {
             if value {
                 return Err(eyre!("token is banned"));
@@ -70,7 +72,7 @@ pub async fn validate_token(
 
     decode::<Claims>(
         token,
-        &DecodingKey::from_secret(JWT_SECRET.as_bytes()),
+        &DecodingKey::from_secret(JWT_SECRET.expose_secret().as_bytes()),
         &Validation::default(),
     )
     .map(|data| data.claims)
@@ -83,7 +85,7 @@ fn create_token(claims: &Claims) -> Result<String> {
     encode(
         &jsonwebtoken::Header::default(),
         &claims,
-        &EncodingKey::from_secret(JWT_SECRET.as_bytes()),
+        &EncodingKey::from_secret(JWT_SECRET.expose_secret().as_bytes()),
     )
     .wrap_err("failed to create token")
 }
@@ -97,6 +99,7 @@ pub struct Claims {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use secrecy::SecretString;
     use tokio::sync::RwLock;
     use crate::domain::BannedTokenStore;
     use crate::services::data_stores::hashset_banned_token_store::HashsetBannedTokenStore;
@@ -108,7 +111,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_auth_cookie() {
-        let email = Email::parse("test@example.com".to_owned()).unwrap();
+        let email = Email::parse(SecretString::new("test@example.com".to_owned().into_boxed_str())).unwrap();
         let cookie = generate_auth_cookie(&email).unwrap();
         assert_eq!(cookie.name(), JWT_COOKIE_NAME);
         assert_eq!(cookie.value().split('.').count(), 3);
@@ -130,14 +133,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_auth_token() {
-        let email = Email::parse("test@example.com".to_owned()).unwrap();
+        let email = Email::parse(SecretString::new("test@example.com".to_owned().into_boxed_str())).unwrap();
         let result = generate_auth_token(&email).unwrap();
         assert_eq!(result.split('.').count(), 3);
     }
 
     #[tokio::test]
     async fn test_validate_token_with_valid_token() {
-        let email = Email::parse("test@example.com".to_owned()).unwrap();
+        let email = Email::parse(SecretString::new("test@example.com".to_owned().into_boxed_str())).unwrap();
         let token = generate_auth_token(&email).unwrap();
         let result = validate_token(&token, banned_token_store()).await.unwrap();
         assert_eq!(result.sub, "test@example.com");
@@ -159,11 +162,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_token_with_banned_token() {
-        let email = Email::parse("test@example.com".to_owned()).unwrap();
+        let email = Email::parse(SecretString::new("test@example.com".to_owned().into_boxed_str())).unwrap();
         let token = generate_auth_token(&email).unwrap();
 
         let store = banned_token_store();
-        store.write().await.add_banned_token(token.clone()).await.unwrap();
+        store.write().await.add_banned_token(SecretString::new(token.clone().into_boxed_str())).await.unwrap();
 
         let result = validate_token(&token, store).await;
         assert!(result.is_err());
