@@ -4,6 +4,9 @@ use auth_service::{
     utils::constants::JWT_COOKIE_NAME,
     ErrorResponse,
 };
+use secrecy::{ExposeSecret, SecretString};
+use wiremock::{Mock, ResponseTemplate};
+use wiremock::matchers::{method, path};
 use crate::helpers::{get_random_email, TestApp};
 
 #[tokio::test]
@@ -36,7 +39,7 @@ async fn should_return_400_if_invalid_input() {
     let test_cases = [
         serde_json::json!({
             "email": "not-an-email",
-            "loginAttemptId": LoginAttemptId::default().as_ref().to_owned(),
+            "loginAttemptId": LoginAttemptId::default().as_ref().expose_secret().to_owned(),
             "2FACode": "123456"
         }),
         serde_json::json!({
@@ -46,7 +49,7 @@ async fn should_return_400_if_invalid_input() {
         }),
         serde_json::json!({
             "email": "test@example.com",
-            "loginAttemptId": LoginAttemptId::default().as_ref().to_owned(),
+            "loginAttemptId": LoginAttemptId::default().as_ref().expose_secret().to_owned(),
             "2FACode": "123"
         }),
     ];
@@ -78,8 +81,8 @@ async fn should_return_401_if_incorrect_credentials() {
     let response = app
         .post_verify_2fa(&serde_json::json!({
             "email": get_random_email(),
-            "loginAttemptId": LoginAttemptId::default().as_ref().to_owned(),
-            "2FACode": TwoFACode::default().as_ref().to_owned(),
+            "loginAttemptId": LoginAttemptId::default().as_ref().expose_secret().to_owned(),
+            "2FACode": TwoFACode::default().as_ref().expose_secret().to_owned(),
         }))
         .await;
 
@@ -112,9 +115,16 @@ async fn should_return_401_if_old_code() {
         "password": "password123"
     });
 
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(2)
+        .mount(&app.email_server)
+        .await;
+
     app.post_login(&login_body).await;
 
-    let email = Email::parse(random_email.clone()).unwrap();
+    let email = Email::parse(SecretString::new(random_email.clone().into_boxed_str())).unwrap();
     let (old_login_attempt_id, old_code) = app
         .two_fa_code_store
         .read()
@@ -128,8 +138,8 @@ async fn should_return_401_if_old_code() {
     let response = app
         .post_verify_2fa(&serde_json::json!({
             "email": random_email,
-            "loginAttemptId": old_login_attempt_id.as_ref().to_owned(),
-            "2FACode": old_code.as_ref().to_owned(),
+            "loginAttemptId": old_login_attempt_id.as_ref().expose_secret().to_owned(),
+            "2FACode": old_code.as_ref().expose_secret().to_owned(),
         }))
         .await;
 
@@ -154,6 +164,14 @@ async fn should_return_200_if_correct_code() {
         "email": random_email,
         "password": "password123"
     });
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
     let login_response = app.post_login(&login_body).await;
 
     let login_attempt_id = login_response
@@ -162,7 +180,7 @@ async fn should_return_200_if_correct_code() {
         .expect("Could not deserialize login response")
         .login_attempt_id;
 
-    let email = Email::parse(random_email.clone()).unwrap();
+    let email = Email::parse(SecretString::new(random_email.clone().into_boxed_str())).unwrap();
     let (_, code) = app
         .two_fa_code_store
         .read()
@@ -175,7 +193,7 @@ async fn should_return_200_if_correct_code() {
         .post_verify_2fa(&serde_json::json!({
             "email": random_email,
             "loginAttemptId": login_attempt_id,
-            "2FACode": code.as_ref().to_owned(),
+            "2FACode": code.as_ref().expose_secret().to_owned(),
         }))
         .await;
 
@@ -207,6 +225,14 @@ async fn should_return_401_if_same_code_twice() {
         "email": random_email,
         "password": "password123"
     });
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
+
     let login_response = app.post_login(&login_body).await;
 
     let login_attempt_id = login_response
@@ -215,7 +241,7 @@ async fn should_return_401_if_same_code_twice() {
         .expect("Could not deserialize login response")
         .login_attempt_id;
 
-    let email = Email::parse(random_email.clone()).unwrap();
+    let email = Email::parse(SecretString::new(random_email.clone().into_boxed_str())).unwrap();
     let (_, code) = app
         .two_fa_code_store
         .read()
@@ -227,7 +253,7 @@ async fn should_return_401_if_same_code_twice() {
     let verify_body = serde_json::json!({
         "email": random_email,
         "loginAttemptId": login_attempt_id,
-        "2FACode": code.as_ref().to_owned(),
+        "2FACode": code.as_ref().expose_secret().to_owned(),
     });
 
     let response = app.post_verify_2fa(&verify_body).await;

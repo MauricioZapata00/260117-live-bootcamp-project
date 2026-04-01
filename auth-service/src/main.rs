@@ -1,14 +1,17 @@
 use auth_service::app_state::AppState;
+use auth_service::domain::Email;
 use auth_service::get_postgres_pool;
 use auth_service::get_redis_client;
 use auth_service::services::data_stores::postgres_user_store::PostgresUserStore;
 use auth_service::services::data_stores::redis_banned_token_store::RedisBannedTokenStore;
 use auth_service::services::data_stores::redis_two_fa_code_store::RedisTwoFACodeStore;
-use auth_service::services::mock_email_client::MockEmailClient;
-use auth_service::utils::constants::{prod, DATABASE_URL, REDIS_HOST_NAME};
+use auth_service::services::postmark_email_client::PostmarkEmailClient;
+use auth_service::utils::constants::{prod, DATABASE_URL, POSTMARK_AUTH_TOKEN, REDIS_HOST_NAME};
 use auth_service::utils::tracing::init_tracing;
 use auth_service::Application;
 use redis::Connection;
+use reqwest::Client;
+use secrecy::SecretString;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -23,7 +26,7 @@ async fn main() {
     let user_store = Arc::new(RwLock::new(PostgresUserStore::new(pg_pool)));
     let banned_token_store = Arc::new(RwLock::new(RedisBannedTokenStore::new(redis_conn.clone())));
     let two_fa_code_store = Arc::new(RwLock::new(RedisTwoFACodeStore::new(redis_conn)));
-    let email_client = Arc::new(MockEmailClient);
+    let email_client = Arc::new(configure_postmark_email_client());
 
     let app_state = AppState::new(user_store, banned_token_store, two_fa_code_store, email_client);
 
@@ -54,4 +57,21 @@ fn configure_redis() -> Arc<RwLock<Connection>> {
             .get_connection()
             .expect("Failed to get Redis connection"),
     ))
+}
+
+fn configure_postmark_email_client() -> PostmarkEmailClient {
+    let http_client = Client::builder()
+        .timeout(prod::email_client::TIMEOUT)
+        .build()
+        .expect("Failed to build HTTP client");
+
+    PostmarkEmailClient::new(
+        prod::email_client::BASE_URL.to_owned(),
+        Email::parse(SecretString::new(
+            prod::email_client::SENDER.to_owned().into_boxed_str(),
+        ))
+        .expect("Failed to parse sender email"),
+        POSTMARK_AUTH_TOKEN.clone(),
+        http_client,
+    )
 }

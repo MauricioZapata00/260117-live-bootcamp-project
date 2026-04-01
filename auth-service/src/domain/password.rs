@@ -130,7 +130,7 @@ mod tests {
                 .unwrap();
 
         use secrecy::ExposeSecret;
-        assert_eq!(hash_password.as_ref().expose_secret().as_ref(), hash_string.as_str());
+        assert_eq!(hash_password.as_ref().expose_secret(), hash_string.as_str());
         assert!(hash_password.as_ref().expose_secret().starts_with("$argon2id$v=19$"));
     }
 
@@ -154,7 +154,7 @@ mod tests {
                 .unwrap();
 
         use secrecy::ExposeSecret;
-        assert_eq!(hash_password.as_ref().expose_secret().as_ref(), hash_string.as_str());
+        assert_eq!(hash_password.as_ref().expose_secret(), hash_string.as_str());
         assert!(hash_password.as_ref().expose_secret().starts_with("$argon2id$v=19$"));
 
         let password_candidate = SecretString::new(raw_password.to_owned().into_boxed_str());
@@ -166,12 +166,10 @@ mod tests {
     struct ValidPasswordFixture(pub SecretString);
 
     impl quickcheck::Arbitrary for ValidPasswordFixture {
-        fn arbitrary(g: &mut quickcheck::Gen) -> Self {
-            let seed: u64 = g.size() as u64;
-            let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+        fn arbitrary(_g: &mut quickcheck::Gen) -> Self {
             use fake::faker::internet::en::Password as FakePassword;
             use fake::Fake;
-            let password: String = FakePassword(8..30).fake_with_rng(&mut rng);
+            let password: String = FakePassword(8..30).fake();
             Self(SecretString::new(password.into_boxed_str()))
         }
     }

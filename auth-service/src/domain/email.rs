@@ -43,9 +43,7 @@ impl AsRef<SecretString> for Email {
 mod tests {
     use super::*;
     use fake::faker::internet::en::SafeEmail;
-    use fake::Fake;
     use quickcheck::Gen;
-    use rand::SeedableRng;
 
     #[test]
     fn empty_string_is_rejected() {
@@ -69,10 +67,9 @@ mod tests {
     struct ValidEmailFixture(pub String);
 
     impl quickcheck::Arbitrary for ValidEmailFixture {
-        fn arbitrary(g: &mut Gen) -> Self {
-            let seed: u64 = g.size() as u64;
-            let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
-            let email = SafeEmail().fake_with_rng(&mut rng);
+        fn arbitrary(_g: &mut Gen) -> Self {
+            use fake::Fake;
+            let email: String = SafeEmail().fake();
             Self(email)
         }
     }

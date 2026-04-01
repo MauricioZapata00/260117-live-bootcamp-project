@@ -4,6 +4,9 @@ use auth_service::{
     utils::constants::JWT_COOKIE_NAME,
     ErrorResponse,
 };
+use secrecy::{ExposeSecret, SecretString};
+use wiremock::{Mock, ResponseTemplate};
+use wiremock::matchers::{method, path};
 use crate::helpers::{get_random_email, TestApp};
 
 #[tokio::test]
@@ -157,7 +160,15 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
         "password": "password123",
         "requires2FA": true
     });
-    app.post_signup(&signup_body).await;
+    let response = app.post_signup(&signup_body).await;
+    assert_eq!(response.status().as_u16(), 201);
+
+    Mock::given(path("/email"))
+        .and(method("POST"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&app.email_server)
+        .await;
 
     let login_body = serde_json::json!({
         "email": random_email,
@@ -174,11 +185,11 @@ async fn should_return_206_if_valid_credentials_and_2fa_enabled() {
 
     assert_eq!(json_body.message, "2FA required".to_owned());
 
-    let email = Email::parse(random_email).unwrap();
+    let email = Email::parse(SecretString::new(random_email.into_boxed_str())).unwrap();
     let result = app.two_fa_code_store.read().await.get_code(&email).await;
     assert!(result.is_ok());
     let (login_attempt_id, _) = result.unwrap();
-    assert_eq!(login_attempt_id.as_ref(), json_body.login_attempt_id);
+    assert_eq!(login_attempt_id.as_ref().expose_secret(), &json_body.login_attempt_id);
 
     app.clean_up().await;
 }

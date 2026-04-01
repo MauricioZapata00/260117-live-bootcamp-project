@@ -30,11 +30,12 @@ redis = { version = "0.32.7", features = ["tokio-comp"] }
 sqlx = { version = "=0.8.6", features = [ "runtime-tokio-rustls", "postgres", "migrate"] }
 validator = "=0.20.0"
 secrecy = { version = "0.10.3", features = ["serde"] }
+reqwest = { version = "0.13.2", default-features = false, features = ["json", "rustls", "cookies"] }
 
 [dev-dependencies]
 fake = "=4.4.0"
 quickcheck = "1.0.3"
 quickcheck_macros = "1.2.0"
 rand = "0.10.0"
-reqwest = { version = "0.13.2", default-features = false, features = ["json", "cookies"] }
 serde_json = "1.0.149"
+wiremock = "0.6.5"
